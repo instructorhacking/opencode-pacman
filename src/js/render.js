@@ -70,10 +70,12 @@ function drawDots( ctx, grid ) {
   ctx.fillStyle = DOT_COLOR;
   for ( let y = 0; y < grid.length; y++ ) {
     for ( let x = 0; x < grid[ 0 ].length; x++ ) {
-      if ( grid[ y ][ x ] !== 2 ) continue;
+      const v = grid[ y ][ x ];
+      if ( v !== 2 && v !== 4 ) continue;
       const { cx, cy } = cellCenter( x, y );
       ctx.beginPath();
-      ctx.arc( cx, cy, 2.5, 0, Math.PI * 2 );
+      // dot (2) radio 2.5 · power pellet (4) radio 7.
+      ctx.arc( cx, cy, v === 2 ? 2.5 : 7, 0, Math.PI * 2 );
       ctx.fill();
     }
   }
@@ -98,7 +100,9 @@ function drawPacman( ctx, p, frame ) {
   ctx.fill();
 }
 
-function drawGhost( ctx, g, color ) {
+// eyeColor definido (modo asustado): ojos planos de ese color, sin pupila.
+// Sin argumento: ojos normales con pupila mirando segun direccion.
+function drawGhost( ctx, g, color, eyeColor ) {
   const { cx, cy } = cellCenter( g.x, g.y );
   const r = TILE / 2 - 1;
   const top = cy - r;
@@ -117,6 +121,17 @@ function drawGhost( ctx, g, color ) {
   ctx.lineTo( left, bottom );
   ctx.closePath();
   ctx.fill();
+
+  // Ojos del modo asustado: planos y fijos.
+  if ( eyeColor ) {
+    for ( const off of [ -3.5, 3.5 ] ) {
+      ctx.fillStyle = eyeColor;
+      ctx.beginPath();
+      ctx.arc( cx + off, cy - 1, 2.5, 0, Math.PI * 2 );
+      ctx.fill();
+    }
+    return;
+  }
 
   // ojos mirando segun direccion
   const dir = DIRS[ g.dir ] || { x: 0, y: 0 };
@@ -150,6 +165,26 @@ const GHOST_COLORS = {
   flanqueador: '#00ffff', // cian
   timido: '#ffb852',      // naranja
 };
+const FRIGHT_COLOR = '#2121de'; // cuerpo azul del modo asustado
+
+// Fantasmas: normal = color de su personalidad; asustado = cuerpo azul con
+// ojos blancos; en los ultimos FRIGHT_FLASH_FRAMES parpadea azul/blanco
+// (ojos invertidos en cada fase para seguirse viendo).
+function drawGhosts( ctx, game, frame ) {
+  const fright = game.frightTimer > 0;
+  // Fase del parpadeo: alterna cada 16 frames (~0,27 s por fase).
+  const white =
+    fright && game.frightTimer <= FRIGHT_FLASH_FRAMES && Math.floor( frame / 16 ) % 2 === 0;
+  game.ghosts.forEach( ( g ) => {
+    if ( !fright ) {
+      drawGhost( ctx, g, GHOST_COLORS[ g.kind ] || '#ff0000' );
+      return;
+    }
+    const body = white ? '#ffffff' : FRIGHT_COLOR;
+    const eyes = white ? FRIGHT_COLOR : '#ffffff';
+    drawGhost( ctx, g, body, eyes );
+  } );
+}
 
 function draw( ctx, game, frame ) {
   const grid = game.grid;
@@ -163,7 +198,7 @@ function draw( ctx, game, frame ) {
   drawDoor( ctx, grid );
   drawDots( ctx, grid );
   drawPacman( ctx, game.pacman, frame );
-  game.ghosts.forEach( ( g ) => drawGhost( ctx, g, GHOST_COLORS[ g.kind ] || '#ff0000' ) );
+  drawGhosts( ctx, game, frame );
   drawHUD( ctx, game, W );
 }
 
