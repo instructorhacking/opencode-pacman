@@ -42,6 +42,7 @@ function createGame() {
       dir: 'up',
       speed: GHOST_SPEED,
       kind: g.kind,
+      wait: g.release,
     } ) ),
   };
 }
@@ -168,6 +169,7 @@ function resetPositions( game ) {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.wait = GHOST_STARTS[ i ].release; // re-escalonar salidas
   } );
 }
 
@@ -177,7 +179,14 @@ function collides( a, b ) {
 
 function update( game ) {
   movePacman( game );
-  game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
+  // Salida escalonada: mientras wait > 0 el fantasma espera en la perrera.
+  game.ghosts.forEach( ( g ) => {
+    if ( g.wait > 0 ) {
+      g.wait--;
+      return;
+    }
+    moveGhost( game, g );
+  } );
 
   for ( const g of game.ghosts ) {
     if ( collides( game.pacman, g ) ) {
