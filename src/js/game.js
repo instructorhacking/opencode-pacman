@@ -258,8 +258,19 @@ function update( game ) {
     moveGhost( game, g );
   } );
 
-  for ( const g of game.ghosts ) {
+  for ( const [ i, g ] of game.ghosts.entries() ) {
     if ( collides( game.pacman, g ) ) {
+      // Fantasma asustado: Pac-Man se lo come (cadena 200·2^n) y vuelve a
+      // su casilla de la perrera para re-salir como al inicio.
+      if ( game.frightTimer > 0 ) {
+        game.score += 200 * 2 ** game.frightEaten;
+        game.frightEaten++;
+        g.x = GHOST_STARTS[ i ].x;
+        g.y = GHOST_STARTS[ i ].y;
+        g.dir = 'up';
+        g.wait = GHOST_RESPAWN_WAIT;
+        continue; // con hambre: otros pueden caer en el mismo frame
+      }
       game.lives--;
       if ( game.lives <= 0 ) {
         game.state = 'lost';
