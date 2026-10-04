@@ -99,6 +99,11 @@ Objetivo de persecución por kind (celdas, distancia Manhattan):
 - **Sí:** salida escalonada con contador `wait` por fantasma — evita la emboscada 4
   contra 1 al aparecer y se reinicia sola en `resetPositions` sin tocar `main.js`.
 - **No:** reloj global de frames para el escalonado — acoplaría `main.js` al asunto.
+- **Sí:** guion de salida de perrera (añadido en implementación) — el voraz por
+  Manhattan solo no saca a nadie mientras el objetivo esté debajo de la puerta:
+  rondan dentro y saldrían los 4 en masa al subir Pac-Man. Dentro de la perrera
+  el objetivo es fijo la celda sobre la puerta; la personalidad manda solo
+  fuera, como en el arcade original.
 - **Sí:** kinds en español con color por kind — el repo es todo en español.
 - **No:** nombres `blinky`/`pinky`/`inky`/`clyde` — en inglés, rompen la convención.
 - **Sí:** esquina fija para el tímido — es su personalidad clásica, no un modo scatter.
