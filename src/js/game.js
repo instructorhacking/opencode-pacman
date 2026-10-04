@@ -13,6 +13,11 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
 
+// Modo asustado (power pellets).
+const FRIGHT_FRAMES = 360;       // 6 s a 60 fps
+const FRIGHT_FLASH_FRAMES = 120; // ultimos 2 s parpadeando
+const GHOST_RESPAWN_WAIT = 90;   // re-salida tras ser comido
+
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
 function createGame() {
@@ -28,6 +33,8 @@ function createGame() {
     score: 0,
     lives: 3,
     dotsRemaining: dots,
+    frightTimer: 0, // frames restantes del modo asustado (0 = inactivo)
+    frightEaten: 0, // fantasmas comidos con el pellet actual
     grid,
     pacman: {
       x: PACMAN_START.x,
@@ -101,6 +108,13 @@ function movePacman( game ) {
       grid[ p.y ][ p.x ] = 0;
       game.score += v === 2 ? 10 : 50;
       game.dotsRemaining--;
+      // El pellet asusta: timer a tope, cadena a 0 y reversa inmediata de
+      // direccion como senal visible del cambio de modo.
+      if ( v === 4 ) {
+        game.frightTimer = FRIGHT_FRAMES;
+        game.frightEaten = 0;
+        game.ghosts.forEach( ( g ) => { g.dir = OPPOSITE[ g.dir ]; } );
+      }
     }
     // Si no puede seguir, se detiene en la celda.
     if ( !canMove( grid, p.x, p.y, p.dir, 'pacman' ) ) return;
@@ -128,6 +142,11 @@ function ghostTarget( game, g ) {
   const p = game.pacman;
   const px = Math.round( p.x );
   const py = Math.round( p.y );
+
+  // Modo asustado: la personalidad se anula; el objetivo pasa a ser Pac-Man
+  // y decideGhost invierte el criterio (huir en vez de perseguir).
+  if ( game.frightTimer > 0 ) return { x: px, y: py };
+
   const d = DIRS[ p.dir ];
 
   if ( g.kind === 'cazador' ) {
@@ -158,9 +177,14 @@ function ghostTarget( game, g ) {
 
 // Decision voraz: en cada celda alineada elige la direccion (sin retroceder)
 // que mas reduce la distancia Manhattan al objetivo de su personalidad.
+// Con el modo asustado el criterio se invierte fuera de la perrera: huye de
+// Pac-Man eligiendo la direccion que MAS distancia Manhattan le pone.
 function decideGhost( game, g ) {
   const grid = game.grid;
   const target = ghostTarget( game, g );
+  // En la perrera manda el guion de salida (que minimiza): los fantasmas
+  // re-salientes no quedan atrapados mientras dura el fright.
+  const flee = game.frightTimer > 0 && !inPen( Math.round( g.x ), Math.round( g.y ) );
 
   const options = Object.keys( DIRS ).filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
@@ -169,13 +193,13 @@ function decideGhost( game, g ) {
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
 
   let best = choices[ 0 ];
-  let bestDist = Infinity;
+  let bestDist = flee ? -Infinity : Infinity;
   for ( const dir of choices ) {
     const d = DIRS[ dir ];
     const nx = g.x + d.x;
     const ny = g.y + d.y;
     const dist = Math.abs( nx - target.x ) + Math.abs( ny - target.y );
-    if ( dist < bestDist ) {
+    if ( flee ? dist > bestDist : dist < bestDist ) {
       bestDist = dist;
       best = dir;
     }
@@ -206,6 +230,9 @@ function resetPositions( game ) {
   p.y = PACMAN_START.y;
   p.dir = 'left';
   p.nextDir = null;
+  // Perder una vida limpia el modo asustado: nada azul tras el reinicio.
+  game.frightTimer = 0;
+  game.frightEaten = 0;
   game.ghosts.forEach( ( g, i ) => {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
@@ -219,6 +246,8 @@ function collides( a, b ) {
 }
 
 function update( game ) {
+  // Reloj global del modo asustado: un frame menos por tick.
+  if ( game.frightTimer > 0 ) game.frightTimer--;
   movePacman( game );
   // Salida escalonada: mientras wait > 0 el fantasma espera en la perrera.
   game.ghosts.forEach( ( g ) => {
@@ -247,3 +276,4 @@ function update( game ) {
 window.createGame = createGame;
 window.update = update;
 window.DIRS = DIRS;
+window.FRIGHT_FLASH_FRAMES = FRIGHT_FLASH_FRAMES; // render.js: parpadeo final
