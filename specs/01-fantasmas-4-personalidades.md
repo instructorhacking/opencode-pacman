@@ -1,6 +1,6 @@
 # SPEC 01 — Cuatro fantasmas con personalidades distintas
 
-> **Estado:** Approved
+> **Estado:** Implemented
 > **Depende de:** ninguna
 > **Fecha:** 2026-10-03
 > **Objetivo:** Sustituir los 2 fantasmas actuales por 4 con personalidades clásicas del arcade y salida escalonada de la perrera, donde el cazador persigue agresivamente a Pac-Man.
