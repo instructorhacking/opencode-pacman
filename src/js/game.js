@@ -1,6 +1,6 @@
 // game.js
 // Estado y reglas. Depende de globals de maze.js: MAZE, TUNNEL_ROW,
-// PACMAN_START, GHOST_STARTS.
+// PACMAN_START, GHOST_STARTS, TIMID_CORNER.
 
 const DIRS = {
   left: { x: -1, y: 0 },
@@ -42,6 +42,7 @@ function createGame() {
       dir: 'up',
       speed: GHOST_SPEED,
       kind: g.kind,
+      wait: g.release,
     } ) ),
   };
 }
@@ -110,9 +111,55 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
+// Dentro de la perrera (interior + celdas de puerta)?
+function inPen( x, y ) {
+  if ( y >= 13 && y <= 15 && x >= 11 && x <= 16 ) return true;
+  return y === 12 && x >= 13 && x <= 14;
+}
+
+// Celda objetivo de cada fantasma segun su personalidad. Solo se usa para
+// distancia Manhattan: que caiga en pared o fuera del mapa no importa.
+function ghostTarget( game, g ) {
+  // En la perrera manda el guion de salida (como el arcade): objetivo fijo
+  // sobre la puerta; la personalidad manda solo fuera.
+  if ( inPen( Math.round( g.x ), Math.round( g.y ) ) ) return { x: 13, y: 11 };
+
+  const p = game.pacman;
+  const px = Math.round( p.x );
+  const py = Math.round( p.y );
+  const d = DIRS[ p.dir ];
+
+  if ( g.kind === 'cazador' ) {
+    return { x: px, y: py };
+  }
+
+  if ( g.kind === 'emboscador' ) {
+    // 4 celdas delante de Pac-Man: le corta el paso.
+    return { x: px + d.x * 4, y: py + d.y * 4 };
+  }
+
+  if ( g.kind === 'flanqueador' ) {
+    // punto = Pac-Man + 2*dir; objetivo = espejo del cazador respecto al punto.
+    const hunter = game.ghosts.find( ( o ) => o.kind === 'cazador' );
+    if ( !hunter ) return { x: px, y: py }; // sin cazador, degrada a perseguir
+    const hx = Math.round( hunter.x );
+    const hy = Math.round( hunter.y );
+    const mx = px + d.x * 2;
+    const my = py + d.y * 2;
+    return { x: mx + ( mx - hx ), y: my + ( my - hy ) };
+  }
+
+  // timido: persigue de lejos; a 8 celdas o menos se retira a su esquina.
+  const dist = Math.abs( Math.round( g.x ) - px ) + Math.abs( Math.round( g.y ) - py );
+  if ( dist > 8 ) return { x: px, y: py };
+  return { x: TIMID_CORNER.x, y: TIMID_CORNER.y };
+}
+
+// Decision voraz: en cada celda alineada elige la direccion (sin retroceder)
+// que mas reduce la distancia Manhattan al objetivo de su personalidad.
 function decideGhost( game, g ) {
   const grid = game.grid;
-  const p = game.pacman;
+  const target = ghostTarget( game, g );
 
   const options = Object.keys( DIRS ).filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
@@ -120,25 +167,19 @@ function decideGhost( game, g ) {
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
 
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
-        best = dir;
-      }
+  let best = choices[ 0 ];
+  let bestDist = Infinity;
+  for ( const dir of choices ) {
+    const d = DIRS[ dir ];
+    const nx = g.x + d.x;
+    const ny = g.y + d.y;
+    const dist = Math.abs( nx - target.x ) + Math.abs( ny - target.y );
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
     }
-    g.dir = best;
-  } else {
-    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
   }
+  g.dir = best;
 }
 
 function moveGhost( game, g ) {
@@ -168,6 +209,7 @@ function resetPositions( game ) {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.wait = GHOST_STARTS[ i ].release; // re-escalonar salidas
   } );
 }
 
@@ -177,7 +219,14 @@ function collides( a, b ) {
 
 function update( game ) {
   movePacman( game );
-  game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
+  // Salida escalonada: mientras wait > 0 el fantasma espera en la perrera.
+  game.ghosts.forEach( ( g ) => {
+    if ( g.wait > 0 ) {
+      g.wait--;
+      return;
+    }
+    moveGhost( game, g );
+  } );
 
   for ( const g of game.ghosts ) {
     if ( collides( game.pacman, g ) ) {
